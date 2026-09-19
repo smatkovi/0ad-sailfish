@@ -1,0 +1,14 @@
+--- /tmp/0ad/DCC.orig	2026-09-18 10:42:23.009876848 +0200
++++ source/renderer/backend/gl/DeviceCommandContext.cpp	2026-09-18 10:42:23.020535837 +0200
+@@ -259,6 +259,11 @@
+ 		// Currently we don't support upload buffers for GL.
+ 		if (type == CBuffer::Type::UPLOAD)
+ 			continue;
++#if CONFIG2_GLES
++		// GLES has no uniform buffers; they're used only by the Vulkan backend.
++		if (type == CBuffer::Type::UNIFORM)
++			continue;
++#endif
+ 		const GLenum target = BufferTypeToGLTarget(type);
+ 		const GLuint handle = 0;
+ 		m_BoundBuffers[index].first = target;

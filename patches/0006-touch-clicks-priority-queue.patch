@@ -1,0 +1,144 @@
+The touch layer turns a tap into a synthetic mouse move/press/release. It
+pushed those through SDL_PushEvent, i.e. back into SDL's own queue, so
+in_poll_event handed them to DisplayRotation::TransformEvent a second time
+and every tap on a rotated display landed at the wrong place (the welcome
+dialog's OK button could not be hit). The engine has a queue for events it
+makes itself - in_push_priority_event - which in_poll_event drains before
+SDL's and never transforms. Use that.
+--- source/ps/TouchInput.cpp
++++ source/ps/TouchInput.cpp
+@@ -23,6 +23,7 @@
+ #include "graphics/GameView.h"
+ #include "lib/debug.h"
+ #include "lib/external_libraries/libsdl.h"
++#include "lib/input.h"
+ #include "lib/sysdep/os.h"
+ #include "lib/timer.h"
+ #include "maths/Matrix3D.h"
+@@ -121,114 +121,120 @@
+ 		moveEv.ev.type = SDL_MOUSEMOTION;
+ 		moveEv.ev.motion.x = ev.ev.button.x;
+ 		moveEv.ev.motion.y = ev.ev.button.y;
+-		SDL_PushEvent(&moveEv.ev);
++		// Synthetic events must bypass SDL's queue: in_poll_event rotates
++		// everything that comes out of SDL_PollEvent (DisplayRotation), and
++		// these already carry logical coordinates.
++		in_push_priority_event(&moveEv);
+ 
+ 		ev.ev.type = SDL_MOUSEBUTTONDOWN;
+ 		ev.ev.button.state = SDL_PRESSED;
+-		SDL_PushEvent(&ev.ev);
++		in_push_priority_event(&ev);
+ 
+ 		ev.ev.type = SDL_MOUSEBUTTONUP;
+ 		ev.ev.button.state = SDL_RELEASED;
+-		SDL_PushEvent(&ev.ev);
++		in_push_priority_event(&ev);
+ 	}
+ 	else if (m_State == STATE_ZOOMING && id == 1)
+ 	{
+  		m_State = STATE_PANNING;
+ 	}
+  	else
+ 	{
+ 		m_State = STATE_INACTIVE;
+ 	}
+ }
+ 
+ void CTouchInput::OnFingerMotion(int id, int x, int y)
+ {
+ 	debug_printf("finger motion %d %d %d; state %d\n", id, x, y, m_State);
+ 
+ 	CVector2D pos(x, y);
+ 
+ 	m_Prev[id] = m_Pos[id];
+ 	m_Pos[id] = pos;
+ 
+ 	// In the main menu there is no game and therefore no camera; the prototype
+ 	// dereferenced g_Game unconditionally and crashed on the first drag.
+ 	const bool hasCamera = g_Game && g_Game->GetView() && g_Game->GetView()->GetCamera();
+ 
+ 	if (m_State == STATE_FIRST_TOUCH && id == 0)
+ 	{
+ 		if ((pos - m_FirstTouchPos).Length() > 16)
+ 		{
+ 			if (!hasCamera)
+ 			{
+ 				// a drag is not a tap any more, but there is nothing to pan
+ 				m_State = STATE_INACTIVE;
+ 				return;
+ 			}
+ 			m_State = STATE_PANNING;
+ 
+ 			const CCamera& camera = *(g_Game->GetView()->GetCamera());
+ 			m_PanFocus = camera.GetWorldCoordinates(m_FirstTouchPos.X, m_FirstTouchPos.Y, true);
+ 			m_PanDist = (m_PanFocus - camera.GetOrientation().GetTranslation()).Y;
+ 		}
+ 	}
+ 
+ 	if (m_State == STATE_PANNING && id == 0 && hasCamera)
+ 	{
+ 		CCamera& camera = *(g_Game->GetView()->GetCamera());
+ 		auto [origin, dir] = camera.BuildCameraRay(x, y);
+ 		dir *= m_PanDist / dir.Y;
+ 		camera.GetOrientation().Translate(m_PanFocus - dir - origin);
+ 		camera.UpdateFrustum();
+ 	}
+ 
+ 	if (m_State == STATE_ZOOMING && id == 1 && hasCamera)
+ 	{
+ 		float oldDist = (m_Prev[id] - m_Pos[1 - id]).Length();
+ 		float newDist = (m_Pos[id] - m_Pos[1 - id]).Length();
+ 		float zoomDist = (newDist - oldDist) * -0.005f * m_PanDist;
+ 
+ 		CCamera& camera = *(g_Game->GetView()->GetCamera());
+ 		CVector3D dir{camera.BuildCameraRay(m_Pos[0].X, m_Pos[0].Y).direction};
+ 		dir *= zoomDist;
+ 		camera.GetOrientation().Translate(dir);
+ 		camera.UpdateFrustum();
+ 
+ 		m_PanFocus = camera.GetWorldCoordinates(m_Pos[0].X, m_Pos[0].Y, true);
+ 		m_PanDist = (m_PanFocus - camera.GetOrientation().GetTranslation()).Y;
+ 	}
+ }
+ 
+ void CTouchInput::Frame()
+ {
+ 	double t = timer_Time();
+ 	if (m_State == STATE_FIRST_TOUCH && t > m_FirstTouchTime + 1.0)
+ 	{
+ 		m_State = STATE_INACTIVE;
+ 
+ 		// must be fully initialised: uninitialised clicks/which/windowID are
+ 		// handed to the GUI scripts (GuiScriptConversions.cpp reads .clicks)
+ 		SDL_Event_ ev;
+ 		memset(&ev, 0, sizeof(ev));
+ 		ev.ev.button.clicks = 1;
+ 		ev.ev.button.which = 0;
+ 		ev.ev.button.button = SDL_BUTTON_RIGHT;
+ 		ev.ev.button.x = m_Pos[0].X;
+ 		ev.ev.button.y = m_Pos[0].Y;
+ 
+ 		SDL_Event_ moveEv;
+ 		memset(&moveEv, 0, sizeof(moveEv));
+ 		moveEv.ev.type = SDL_MOUSEMOTION;
+ 		moveEv.ev.motion.x = ev.ev.button.x;
+ 		moveEv.ev.motion.y = ev.ev.button.y;
+-		SDL_PushEvent(&moveEv.ev);
++		// Synthetic events must bypass SDL's queue: in_poll_event rotates
++		// everything that comes out of SDL_PollEvent (DisplayRotation), and
++		// these already carry logical coordinates.
++		in_push_priority_event(&moveEv);
+ 
+ 		ev.ev.type = SDL_MOUSEBUTTONDOWN;
+ 		ev.ev.button.state = SDL_PRESSED;
+-		SDL_PushEvent(&ev.ev);
++		in_push_priority_event(&ev);
+ 
+ 		ev.ev.type = SDL_MOUSEBUTTONUP;
+ 		ev.ev.button.state = SDL_RELEASED;
+-		SDL_PushEvent(&ev.ev);
++		in_push_priority_event(&ev);
+ 	}
+ }
+ 

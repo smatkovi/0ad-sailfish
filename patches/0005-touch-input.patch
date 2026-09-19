@@ -1,0 +1,147 @@
+--- source/ps/TouchInput.cpp
++++ source/ps/TouchInput.cpp
+@@ -30,6 +30,9 @@
+ 
+ #include <SDL_events.h>
+ #include <SDL_mouse.h>
++#include <SDL_touch.h>
++
++#include <cstring>
+ #include <cinttypes>
+ 
+ // When emulation is enabled:
+@@ -58,12 +61,20 @@
+ {
+ }
+ 
++bool CTouchInput::IsGestureActive()
++{
++	return m_State != STATE_INACTIVE;
++}
++
+ bool CTouchInput::IsEnabled()
+ {
+ #if OS_ANDROID || EMULATE_FINGERS_WITH_MOUSE
+ 	return true;
+ #else
+-	return false;
++	// Ask SDL whether this machine actually has a touchscreen instead of
++	// hardcoding a platform. True on Sailfish and Linux tablets, false on a
++	// desktop, so nothing changes there.
++	return SDL_GetNumTouchDevices() > 0;
+ #endif
+ }
+ 
+@@ -95,11 +106,23 @@
+ 	{
+ 		m_State = STATE_INACTIVE;
+ 
++		// must be fully initialised: uninitialised clicks/which/windowID are
++		// handed to the GUI scripts (GuiScriptConversions.cpp reads .clicks)
+ 		SDL_Event_ ev;
++		memset(&ev, 0, sizeof(ev));
++		ev.ev.button.clicks = 1;
++		ev.ev.button.which = 0;
+ 		ev.ev.button.button = SDL_BUTTON_LEFT;
+ 		ev.ev.button.x = m_Pos[0].X;
+ 		ev.ev.button.y = m_Pos[0].Y;
+ 
++		SDL_Event_ moveEv;
++		memset(&moveEv, 0, sizeof(moveEv));
++		moveEv.ev.type = SDL_MOUSEMOTION;
++		moveEv.ev.motion.x = ev.ev.button.x;
++		moveEv.ev.motion.y = ev.ev.button.y;
++		SDL_PushEvent(&moveEv.ev);
++
+ 		ev.ev.type = SDL_MOUSEBUTTONDOWN;
+ 		ev.ev.button.state = SDL_PRESSED;
+ 		SDL_PushEvent(&ev.ev);
+@@ -127,10 +150,20 @@
+ 	m_Prev[id] = m_Pos[id];
+ 	m_Pos[id] = pos;
+ 
++	// In the main menu there is no game and therefore no camera; the prototype
++	// dereferenced g_Game unconditionally and crashed on the first drag.
++	const bool hasCamera = g_Game && g_Game->GetView() && g_Game->GetView()->GetCamera();
++
+ 	if (m_State == STATE_FIRST_TOUCH && id == 0)
+ 	{
+ 		if ((pos - m_FirstTouchPos).Length() > 16)
+ 		{
++			if (!hasCamera)
++			{
++				// a drag is not a tap any more, but there is nothing to pan
++				m_State = STATE_INACTIVE;
++				return;
++			}
+ 			m_State = STATE_PANNING;
+ 
+ 			const CCamera& camera = *(g_Game->GetView()->GetCamera());
+@@ -139,7 +172,7 @@
+ 		}
+ 	}
+ 
+-	if (m_State == STATE_PANNING && id == 0)
++	if (m_State == STATE_PANNING && id == 0 && hasCamera)
+ 	{
+ 		CCamera& camera = *(g_Game->GetView()->GetCamera());
+ 		auto [origin, dir] = camera.BuildCameraRay(x, y);
+@@ -148,7 +181,7 @@
+ 		camera.UpdateFrustum();
+ 	}
+ 
+-	if (m_State == STATE_ZOOMING && id == 1)
++	if (m_State == STATE_ZOOMING && id == 1 && hasCamera)
+ 	{
+ 		float oldDist = (m_Prev[id] - m_Pos[1 - id]).Length();
+ 		float newDist = (m_Pos[id] - m_Pos[1 - id]).Length();
+@@ -172,11 +205,23 @@
+ 	{
+ 		m_State = STATE_INACTIVE;
+ 
++		// must be fully initialised: uninitialised clicks/which/windowID are
++		// handed to the GUI scripts (GuiScriptConversions.cpp reads .clicks)
+ 		SDL_Event_ ev;
++		memset(&ev, 0, sizeof(ev));
++		ev.ev.button.clicks = 1;
++		ev.ev.button.which = 0;
+ 		ev.ev.button.button = SDL_BUTTON_RIGHT;
+ 		ev.ev.button.x = m_Pos[0].X;
+ 		ev.ev.button.y = m_Pos[0].Y;
+ 
++		SDL_Event_ moveEv;
++		memset(&moveEv, 0, sizeof(moveEv));
++		moveEv.ev.type = SDL_MOUSEMOTION;
++		moveEv.ev.motion.x = ev.ev.button.x;
++		moveEv.ev.motion.y = ev.ev.button.y;
++		SDL_PushEvent(&moveEv.ev);
++
+ 		ev.ev.type = SDL_MOUSEBUTTONDOWN;
+ 		ev.ev.button.state = SDL_PRESSED;
+ 		SDL_PushEvent(&ev.ev);
+--- source/ps/TouchInput.h
++++ source/ps/TouchInput.h
+@@ -41,6 +41,10 @@
+ 	 */
+ 	bool IsEnabled();
+ 
++	// true while a touch gesture is in progress, so the normal camera
++	// controller can keep working between gestures (keyboard phones!)
++	bool IsGestureActive();
++
+ 	InReaction HandleEvent(const SDL_Event_* ev);
+ 
+ 	/**
+--- source/graphics/GameView.cpp
++++ source/graphics/GameView.cpp
+@@ -297,7 +297,9 @@
+ 
+ 	// If camera movement is being handled by the touch-input system,
+ 	// then we should stop to avoid conflicting with it
+-	if (g_TouchInput.IsEnabled())
++	// only step aside while a gesture is actually running - otherwise keyboard
++	// and edge scrolling stay dead on devices that have both touch and keys
++	if (g_TouchInput.IsEnabled() && g_TouchInput.IsGestureActive())
+ 		return;
+ 
+ 	if (!g_app_has_focus)

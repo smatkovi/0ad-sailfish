@@ -1,0 +1,13 @@
+--- source/ps/GameSetup/GameSetup.cpp
++++ source/ps/GameSetup/GameSetup.cpp
+@@ -122,7 +122,9 @@
+ #include <utility>
+ 
+ 
+-#if !(OS_WIN || OS_MACOSX || OS_ANDROID) // assume all other platforms use X11 for wxWidgets
++// Sailfish and other Wayland-only platforms have no X11 at all, so ask SDL
++// what it was actually built with instead of assuming.
++#if !(OS_WIN || OS_MACOSX || OS_ANDROID) && defined(SDL_VIDEO_DRIVER_X11)
+ #define MUST_INIT_X11 1
+ #include <X11/Xlib.h>
+ #else

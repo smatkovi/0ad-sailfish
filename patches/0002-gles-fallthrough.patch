@@ -1,0 +1,13 @@
+--- source/renderer/backend/gl/Texture.cpp
++++ source/renderer/backend/gl/Texture.cpp
+@@ -213,8 +213,8 @@
+ 			break;
+ #if CONFIG2_GLES
+ 		// GLES requires pixel type == UNSIGNED_SHORT or UNSIGNED_INT for depth.
+-		case Format::D16_UNORM: FALLTHROUGH;
+-		case Format::D24_UNORM: FALLTHROUGH;
++		case Format::D16_UNORM: [[fallthrough]];
++		case Format::D24_UNORM: [[fallthrough]];
+ 		case Format::D32_SFLOAT:
+ 			internalFormat = GL_DEPTH_COMPONENT;
+ 			pixelFormat = GL_DEPTH_COMPONENT;
