@@ -4,6 +4,8 @@
 #
 # Needs roughly 10 GB free - mozjs alone is ~6 GB of objects.
 set -e
+# resolve before any cd: needed for apply-rotation.py and DisplayRotation.*
+SELF=$(cd "$(dirname "$0")" && pwd)
 
 TARGET=${TARGET:-SailfishOS-5.2.0.15-aarch64}
 PREFIX=${PREFIX:-$HOME/0ad/prefix}
@@ -81,7 +83,6 @@ echo "### self-rotation (landscape inside the portrait surface)"
 # Adds source/ps/DisplayRotation.* and wires them into VideoMode, the input
 # pump and the GL backend. Idempotent, and off unless display.rotation says
 # otherwise - so it changes nothing for a desktop build.
-SELF=$(cd "$(dirname "$0")" && pwd)   # absolute: the tree is our cwd by now
 ROTSRC=""
 for d in "$SELF" "$SELF/../src-new/ps" "$WORK/src-new/ps"; do
     [ -f "$d/DisplayRotation.cpp" ] && ROTSRC=$d && break
