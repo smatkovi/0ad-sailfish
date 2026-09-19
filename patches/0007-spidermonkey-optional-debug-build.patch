@@ -1,0 +1,34 @@
+# The debug SpiderMonkey is only linked by the Debug configuration of pyrogenesis,
+# which the Sailfish package never builds. SKIP_JS_DEBUG=1 leaves it out: half
+# the build time, and the debug variant does not compile on armv7hl at all
+# (-O0 runs out of registers in the generated 64-bit atomics: "asm operand has
+# impossible constraints").
+--- libraries/source/spidermonkey/build.sh
++++ libraries/source/spidermonkey/build.sh
+@@ -151,7 +151,7 @@
+ 
+ 	# Build
+ 	# Debug (broken on FreeBSD)
+-	if [ "${OS}" != "FreeBSD" ]; then
++	if [ "${OS}" != "FreeBSD" ] && [ -z "${SKIP_JS_DEBUG}" ]; then
+ 		# shellcheck disable=SC2086
+ 		MOZCONFIG="$(pwd)/../mozconfig" \
+ 		MOZCONFIG_OPTIONS="${CONF_OPTS} \
+@@ -208,7 +208,7 @@
+ mkdir include-release
+ cp -R -L "${FOLDER}"/build-release/dist/include/* include-release/
+ 
+-if [ "${OS}" != "FreeBSD" ]; then
++if [ "${OS}" != "FreeBSD" ] && [ -z "${SKIP_JS_DEBUG}" ]; then
+ 	mkdir include-debug
+ 	cp -R -L "${FOLDER}"/build-debug/dist/include/* include-debug/
+ fi
+@@ -240,7 +240,7 @@
+ else
+ 	# Copy shared libs to lib/, they will also be copied to binaries/system, so the compiler and executable (resp.) can find them.
+ 	cp -L "${FOLDER}/build-${REL}/dist/bin/${LIB_PREFIX}${LIB_NAME}-${REL}${LIB_SUFFIX}" "lib/${LIB_PREFIX}${LIB_NAME}-${REL}${LIB_SUFFIX}"
+-	if [ "${OS}" != "FreeBSD" ]; then
++	if [ "${OS}" != "FreeBSD" ] && [ -z "${SKIP_JS_DEBUG}" ]; then
+ 		cp -L "${FOLDER}/build-${DEB}/dist/bin/${LIB_PREFIX}${LIB_NAME}-${DEB}${LIB_SUFFIX}" "lib/${LIB_PREFIX}${LIB_NAME}-${DEB}${LIB_SUFFIX}"
+ 	fi
+ fi

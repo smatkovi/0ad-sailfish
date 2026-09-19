@@ -59,11 +59,20 @@ cd 0ad-0.28.0
 echo "### patches"
 # no "|| true" here on purpose: a silently unapplied 0003 gives exactly the
 # GLES crash this whole exercise was about
+# idempotent, so the script can be re-run on a prepared tree after a failure
 for p in "$PATCHES"/000*.patch; do
-    patch -p0 -N -r - < "$p"   # 0001 guards gloox, 0002+0003 fix the GLES path
+    if out=$(patch -p0 -N -r - --dry-run < "$p" 2>&1); then
+        patch -p0 -N -r - < "$p"
+    elif printf '%s' "$out" | grep -q "previously applied"; then
+        echo "already applied: $(basename "$p")"
+    else
+        printf '%s\n' "$out"; echo "patch failed: $p"; exit 1
+    fi
 done
 
 echo "### SpiderMonkey 128"
+# release only (patch 0007): the debug variant is never linked here
+export SKIP_JS_DEBUG=1
 cd libraries
 $SB ./build-source-libs.sh -j"$JOBS"
 cd ..
