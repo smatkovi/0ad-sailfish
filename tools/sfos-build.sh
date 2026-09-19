@@ -81,7 +81,7 @@ echo "### self-rotation (landscape inside the portrait surface)"
 # Adds source/ps/DisplayRotation.* and wires them into VideoMode, the input
 # pump and the GL backend. Idempotent, and off unless display.rotation says
 # otherwise - so it changes nothing for a desktop build.
-SELF=$(dirname "$0")
+SELF=$(cd "$(dirname "$0")" && pwd)   # absolute: the tree is our cwd by now
 ROTSRC=""
 for d in "$SELF" "$SELF/../src-new/ps" "$WORK/src-new/ps"; do
     [ -f "$d/DisplayRotation.cpp" ] && ROTSRC=$d && break
