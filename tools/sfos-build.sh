@@ -1,9 +1,8 @@
 #!/bin/bash
-# Build 0 A.D. 0.28.0 for the Sailfish aarch64 target.
-# Run INSIDE the sfossdk52 container, after sfos-deps.sh.
+# Build 0 A.D. 0.28.0 for a Sailfish target (aarch64 or armv7hl, TARGET=...).
+# Run INSIDE the SDK container, after sfos-deps.sh.
 #
 # Needs roughly 10 GB free - mozjs alone is ~6 GB of objects.
-# UNTESTED - written while the build host had no free disk space.
 set -e
 
 TARGET=${TARGET:-SailfishOS-5.2.0.15-aarch64}
@@ -34,7 +33,12 @@ export CARGO="$RUSTBIN/cargo"
 # compiler for that is the container's own i486 gcc with sb2 mapping switched
 # off - the same hostccwrap the gecko build here uses.
 export CHOST=i686-unknown-linux-gnu
-export CTARGET=aarch64-unknown-linux-gnu
+case "$TARGET" in
+    *aarch64*) CTARGET=aarch64-unknown-linux-gnu ;;
+    *armv7hl*) CTARGET=armv7-unknown-linux-gnueabihf ;;
+    *i486*)    CTARGET=i686-unknown-linux-gnu ;;
+esac
+export CTARGET
 export HOST_CC=/home/mersdk/hostccwrap/host-cc-real
 export HOST_CXX=/home/mersdk/hostccwrap/host-cxx-real
 # host-cc-real runs with SBOX_DISABLE_MAPPING=1, so it sees the real /tmp while
@@ -87,7 +91,7 @@ echo "### make"
 cd ../workspaces/gcc
 # -lstdc++ MUST come before -lmozjs128-release, otherwise the linker resolves
 # libstdc++ symbols out of libmozjs and the game segfaults on the first turn
-$SB make -j"$JOBS" CPPFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib -lstdc++"
+$SB make -j"$JOBS" CPPFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib -L$PREFIX/lib64 -lstdc++"
 
 echo "### result"
 file ../../../binaries/system/pyrogenesis

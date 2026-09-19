@@ -1,9 +1,9 @@
 #!/bin/bash
-# Package the built 0 A.D. tree as a Sailfish aarch64 RPM.
-# Run INSIDE the sfossdk52-0ad container.
+# Package the built 0 A.D. tree as a Sailfish RPM (arch follows TARGET).
+# Run INSIDE the SDK container.
 #
-# The 1.3 GB public.zip is deliberately NOT in the package - it gets downloaded
-# on first run (or pushed manually for testing) into ~/.local/share/0ad/mods.
+# The 3.5 GB public.zip is deliberately NOT in the package - launch.sh downloads
+# it on the first start (see sfos/launch.sh) into ~/.local/share/0ad/mods.
 set -e
 
 TARGET=${TARGET:-SailfishOS-5.2.0.15-aarch64}
@@ -28,9 +28,12 @@ cp "$TREE/binaries/system/libmozjs128-release.so" "$ROOT/usr/share/$NAME/binarie
 cp "$TREE/binaries/system/libCollada.so" "$TREE"/binaries/system/libnv*.so \
    "$ROOT/usr/share/$NAME/binaries/system/"
 # these four do not exist on a stock device, so they travel with us
-cp -L "$PREFIX/lib/libenet.so.7" "$PREFIX/lib/libsodium.so.26" \
-      "$PREFIX/lib64/libfmt.so.11" "$PREFIX/lib64/libopenal.so.1" \
-      "$ROOT/usr/share/$NAME/binaries/system/"
+# (cmake installs into lib64 on aarch64 and into lib on armv7hl)
+for l in libenet.so.7 libsodium.so.26 libfmt.so.11 libopenal.so.1; do
+    f=$(ls "$PREFIX/lib64/$l" "$PREFIX/lib/$l" 2>/dev/null | head -n 1)
+    [ -n "$f" ] || { echo "missing $l in $PREFIX"; exit 1; }
+    cp -L "$f" "$ROOT/usr/share/$NAME/binaries/system/"
+done
 $SB strip --strip-unneeded "$ROOT/usr/share/$NAME/binaries/system/"* 2>/dev/null || true
 
 echo "### data (without public.zip)"
@@ -46,27 +49,13 @@ echo "### launcher"
 #    harbour-pure-maps uses.
 #  - "generic" routes through mapplauncherd's booster, which then enforces
 #    sandboxing; "no-invoker" plus an explicit Sandboxing=Disabled avoids it.
-# cd into a writable directory: 0 A.D. drops profile2.jsonp next to the cwd on
-# exit and blocks on the error dialog if it cannot. Data is found relative to
-# the executable, so cwd is free to be somewhere else.
-cat > "$ROOT/usr/share/$NAME/launch.sh" <<'LAUNCH'
-#!/bin/sh
-ROOT=/usr/share/harbour-0ad
-export LD_LIBRARY_PATH="$ROOT/binaries/system${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-# the engine has its own touch layer now, so SDL must not also synthesise mouse
-# events from the same fingers
-export SDL_TOUCH_MOUSE_EVENTS=0
-# The compositor never hands out a landscape surface, so the engine turns
-# itself: it renders at 2272x1032 and blits that rotated into the portrait
-# surface, rotating input coordinates back. See source/ps/DisplayRotation.h.
-export PYROGENESIS_DISPLAY_ROTATION=90
-export SDL_QTWAYLAND_CONTENT_ORIENTATION=landscape
-RUNDIR="$HOME/.local/share/0ad"
-mkdir -p "$RUNDIR"
-cd "$RUNDIR"
-exec "$ROOT/binaries/system/pyrogenesis" "$@"
-LAUNCH
+# launch.sh and the first-start progress page live next to this script in
+# sfos/ (repository: sfos/launch.sh, sfos/qml/harbour-0ad.qml).
+FILES=${FILES:-$(dirname "$(readlink -f "$0")")/../sfos}
+cp "$FILES/launch.sh" "$ROOT/usr/share/$NAME/launch.sh"
 chmod 755 "$ROOT/usr/share/$NAME/launch.sh"
+mkdir -p "$ROOT/usr/share/$NAME/qml"
+cp "$FILES/qml/harbour-0ad.qml" "$ROOT/usr/share/$NAME/qml/"
 
 cat > "$ROOT/usr/bin/$NAME" <<'BIN'
 #!/bin/sh
@@ -110,11 +99,14 @@ URL:      https://play0ad.com/
 # our bundled libopenal needs.
 AutoReqProv: no
 Requires: libatomic
+# first-start download of the game data (aria2 comes from SailfishOS:Chum)
+Requires: aria2
+Requires: libsailfishapp-launcher
 
 %description
 0 A.D. (Pyrogenesis engine) built for Sailfish OS with the OpenGL ES renderer.
-The game data (public.zip, ~1.3 GB) is not part of this package and belongs in
-~/.local/share/0ad/mods/public/.
+The game data (public.zip, 3.5 GB) is not part of this package. The launcher
+downloads it on the first start with aria2c into ~/.local/share/0ad/mods/public/.
 
 %install
 cp -a $ROOT/* %{buildroot}/
@@ -129,7 +121,8 @@ cp -a $ROOT/* %{buildroot}/
 SPEC
 
 echo "### rpmbuild"
-$SB rpmbuild --target aarch64 \
+case "$TARGET" in *armv7hl*) RPMARCH=armv7hl ;; *i486*) RPMARCH=i486 ;; *) RPMARCH=aarch64 ;; esac
+$SB rpmbuild --target "$RPMARCH" \
     --define "_topdir $WORK/rpmbuild" \
     --define "_rpmdir $WORK/rpmbuild/RPMS" \
     -bb "$WORK/rpmbuild/SPECS/$NAME.spec"

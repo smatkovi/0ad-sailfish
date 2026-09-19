@@ -11,30 +11,38 @@ Ready-made RPMs are on the
 
 ## Installing
 
+The package needs `libatomic` from the Jolla repositories and `aria2` from
+[SailfishOS:Chum](https://github.com/sailfishos-chum/main) (enable Chum with
+Storeman or `sailfishos-chum-gui` first), both declared as dependencies:
+
 ```sh
-pkcon install-local harbour-0ad-0.28.0-*.aarch64.rpm
+pkcon install-local harbour-0ad-0.28.0-*.rpm
 ```
 
-The package needs `libatomic` from the Jolla repositories (declared as a
-dependency). It does **not** contain the game data. `public.zip` is 3.3 GB and
-must be fetched once from Wildfire Games:
+The RPM does **not** contain the game data. On the first start the launcher
+fetches `public.zip` (1.4 GB download, 3.5 GB extracted) with aria2c over
+eight connections, checks the SHA-1 published by Wildfire Games, extracts it
+into `~/.local/share/0ad/mods/public/` and then starts the game. A small
+progress page shows download speed and remaining time; closing it cancels,
+the next start resumes the download. Wi-Fi is recommended.
+
+If you already have `public.zip` from a desktop installation, copy it to
+`~/.local/share/0ad/mods/public/public.zip` and the launcher skips the
+download. To fetch it by hand:
 
 ```sh
 mkdir -p ~/.local/share/0ad
 cd /tmp
-curl -LO https://releases.wildfiregames.com/0ad-0.28.0-unix-data.tar.xz
+aria2c -x 8 https://releases.wildfiregames.com/0ad-0.28.0-unix-data.tar.xz
 tar xf 0ad-0.28.0-unix-data.tar.xz --strip-components=3 \
     -C ~/.local/share/0ad/ 0ad-0.28.0/binaries/data/mods
 ```
 
-This leaves `~/.local/share/0ad/mods/public/public.zip` and
-`mods/mod/mod.zip` where the engine expects them. `aria2c` is a lot faster
-than `curl` for the download if you have it.
-
-Then start the game from the launcher icon. The app is intentionally not
-sandboxed (Sailjail refuses to start shell scripts), the launcher exports
-`SDL_TOUCH_MOUSE_EVENTS=0`, `PYROGENESIS_DISPLAY_ROTATION=90` and changes into
-`~/.local/share/0ad` before starting the engine.
+The app is intentionally not sandboxed (Sailjail refuses to start shell
+scripts). The launcher `sfos/launch.sh` exports `SDL_TOUCH_MOUSE_EVENTS=0`
+and `PYROGENESIS_DISPLAY_ROTATION=90` and changes into `~/.local/share/0ad`
+before starting the engine; `sfos/qml/harbour-0ad.qml` is the progress page,
+run through `sailfish-qml`.
 
 ### Tips
 
@@ -70,13 +78,14 @@ desktop builds are untouched) or the `PYROGENESIS_DISPLAY_ROTATION`
 environment variable.
 
 `data-config/default.cfg` and `keys.txt` are the configuration shipped in the
-package.
+package, `sfos/` the launcher and its first-start page.
 
 ## Building
 
 The build runs inside a Sailfish SDK (Platform SDK / scratchbox2) container
-with the target `SailfishOS-5.2.0.15-aarch64`. Roughly 10 GB of disk are
-needed; SpiderMonkey alone produces about 6 GB of objects.
+with the target `SailfishOS-5.2.0.15-aarch64` or `-armv7hl` (all scripts take
+`TARGET=...`). Roughly 10 GB of disk are needed; SpiderMonkey alone produces
+about 6 GB of objects.
 
 1. Install into the target what the stock SDK target lacks:
    `boost-devel SDL2-devel libxml2-devel libcurl-devel libicu-devel
@@ -96,9 +105,10 @@ Things that bit during the port and are handled by the scripts:
   otherwise libstdc++ symbols resolve into libmozjs and the game crashes in
   the first simulation turn.
 - SpiderMonkey needs Rust. The scripts use a rustup 1.82 toolchain with an
-  i686 host and the aarch64 standard library, run through a wrapper that
-  forces the cross linker, and configure it as a real cross build
-  (`CHOST=i686-unknown-linux-gnu`, `CTARGET=aarch64-unknown-linux-gnu`).
+  i686 host and the aarch64/armv7 standard libraries, run through a wrapper
+  that forces the cross linker, and configure it as a real cross build
+  (`CHOST=i686-unknown-linux-gnu`, `CTARGET=aarch64-unknown-linux-gnu` or
+  `armv7-unknown-linux-gnueabihf`).
 - The `--gles` premake option is described as non-working upstream but only
   needs patches 0002 and 0003.
 

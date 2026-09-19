@@ -1,11 +1,9 @@
 #!/bin/bash
-# Build the four libraries 0 A.D. needs that the Sailfish aarch64 target does
-# not ship. Everything lands in a prefix, so the shared target sysroot stays
+# Build the four libraries 0 A.D. needs that the Sailfish targets do not ship
+# (TARGET=SailfishOS-5.2.0.15-aarch64 or -armv7hl). Everything lands in a prefix, so the shared target sysroot stays
 # untouched - other projects use that target too.
 #
-# Run INSIDE the sfossdk52 container:  bash sfos-deps.sh
-#
-# UNTESTED - written while the build host had no free disk space.
+# Run INSIDE the SDK container:  bash sfos-deps.sh
 set -e
 
 TARGET=${TARGET:-SailfishOS-5.2.0.15-aarch64}
