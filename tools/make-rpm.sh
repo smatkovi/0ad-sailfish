@@ -8,8 +8,12 @@ set -e
 
 TARGET=${TARGET:-SailfishOS-5.2.0.15-aarch64}
 TREE=${TREE:-/home/mersdk/0ad/0ad-0.28.0}
-PREFIX=${PREFIX:-/home/mersdk/0ad/prefix}
 WORK=${WORK:-/home/mersdk/0ad}
+# Derived from WORK, never a path of its own: passing WORK for the armv7hl
+# tree while PREFIX still pointed at the aarch64 one put an aarch64 libopenal
+# into an armv7hl package, and strip's "file format not recognized" was
+# swallowed by a || true.
+PREFIX=${PREFIX:-$WORK/prefix}
 NAME=harbour-0ad
 VERSION=0.28.0
 RELEASE=${RELEASE:-1}
@@ -35,7 +39,14 @@ for l in libenet.so.7 libsodium.so.26 libfmt.so.11 libopenal.so.1; do
     [ -n "$f" ] || { echo "missing $l in $PREFIX"; exit 1; }
     cp -L "$f" "$ROOT/usr/share/$NAME/binaries/system/"
 done
-$SB strip --strip-unneeded "$ROOT/usr/share/$NAME/binaries/system/"* 2>/dev/null || true
+# Strip each file by name and complain when one will not strip: silencing the
+# whole glob once hid an aarch64 library sitting in an armv7hl package, where
+# the only symptom was "file format not recognized" going to /dev/null.
+for f in "$ROOT/usr/share/$NAME/binaries/system/"*; do
+    [ -f "$f" ] || continue
+    $SB strip --strip-unneeded "$f" 2>/dev/null ||
+        echo "WARNING: cannot strip $(basename "$f") - wrong architecture?" >&2
+done
 
 echo "### data (without public.zip)"
 cp -a "$TREE/binaries/data/config" "$TREE/binaries/data/l10n" "$TREE/binaries/data/tools" \
@@ -43,10 +54,15 @@ cp -a "$TREE/binaries/data/config" "$TREE/binaries/data/l10n" "$TREE/binaries/da
 
 # The repository's own default.cfg wins: it carries the touch settings and
 # turns off mouse edge scrolling, which has nothing to push against on a
-# phone and otherwise runs for ever after a tap near the edge.
+# phone and otherwise runs for ever after a tap near the edge. The directory
+# is created here rather than assumed - the armv7hl tree has no
+# binaries/data/config of its own, and the copy above is allowed to fail.
 if [ -f "$FILES/../data-config/default.cfg" ]; then
-    cp "$FILES/../data-config/default.cfg" \
-       "$ROOT/usr/share/$NAME/binaries/data/config/default.cfg"
+    mkdir -p "$ROOT/usr/share/$NAME/binaries/data/config"
+    cp "$FILES/../data-config/default.cfg" "$FILES/../data-config/keys.txt" \
+       "$ROOT/usr/share/$NAME/binaries/data/config/"
+else
+    echo "WARNING: data-config/default.cfg not found, shipping upstream config" >&2
 fi
 mkdir -p "$ROOT/usr/share/$NAME/binaries/data/mods"
 cp -a "$TREE/binaries/data/mods/mod" "$ROOT/usr/share/$NAME/binaries/data/mods/" 2>/dev/null || true
