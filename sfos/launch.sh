@@ -40,7 +40,11 @@ cd "$DATA" || exit 1
 
 start_game() {
     rm -f "$STATUS"
-    exec "$ROOT/binaries/system/pyrogenesis" "$@"
+    # Keep stdout and stderr: the touch layer traces gestures with
+    # debug_printf, which never reaches mainlog.html, and started from the
+    # icon there is nowhere for it to go otherwise. Truncated every start, so
+    # it cannot grow without bound.
+    exec "$ROOT/binaries/system/pyrogenesis" "$@" > "$DATA/run.log" 2>&1
 }
 
 size_of() { stat -c %s "$1" 2>/dev/null || echo 0; }

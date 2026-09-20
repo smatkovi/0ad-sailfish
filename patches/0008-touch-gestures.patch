@@ -363,7 +363,7 @@ which never mattered while the zoom was being thrown away and does now.
  	m_Down[id] = true;
  	m_Prev[id] = m_Pos[id] = CVector2D(x, y);
  
-@@ -90,152 +274,177 @@
+@@ -90,152 +274,202 @@
  		m_State = STATE_FIRST_TOUCH;
  		m_FirstTouchTime = timer_Time();
  		m_FirstTouchPos = CVector2D(x, y);
@@ -568,19 +568,44 @@ which never mattered while the zoom was being thrown away and does now.
 +		// midpoint rather than fighting each other.
 +		if (m_PinchDist > 1.0f && newDist > 1.0f)
 +		{
-+			const CCamera& camera = *(g_Game->GetView()->GetCamera());
++			CGameView* view = g_Game->GetView();
++			const CCamera& camera = *(view->GetCamera());
 +			const CVector3D camPos = camera.GetOrientation().GetTranslation();
-+			const float height = m_PanFocus.Y - camPos.Y;
-+			const CVector3D dir{camera.BuildCameraRay(mid.X, mid.Y).direction};
-+			const CVector3D delta = dir * ((newDist - m_PinchDist) * -0.005f * height);
 +
-+			// Nothing clamped the pinch before, because the whole move was
-+			// thrown away when the fingers left. Now that it stays, keep the
-+			// camera inside the same range the mouse wheel is held to -
-+			// otherwise you can pinch your way under the terrain.
-+			const float d = (camPos + delta - m_PanFocus).Length();
-+			if (d >= m_ZoomMin && d <= m_ZoomMax)
-+				MoveCameraBy(delta);
++			// Spreading the fingers zooms in, which moves the camera towards
++			// what it is looking at and so shortens the distance m_Zoom
++			// stands for (FocusHeight: pivot = position + forwards * zoom).
++			const float height = fabsf(m_PanFocus.Y - camPos.Y);
++			float along = (newDist - m_PinchDist) * 0.005f * height;
++
++			// Clamp the move, do not drop it. An earlier version refused any
++			// step whose camera-to-focus distance fell outside the zoom range,
++			// and since that distance is measured to the terrain under the
++			// fingers - not to the point the camera orbits - it was usually
++			// outside, so pinching did nothing at all. Bounding m_Zoom itself
++			// is both the quantity the engine limits and one that keeps
++			// zooming smooth right up to the edge.
++			const float zoom = view->GetCameraZoom();
++			float newZoom = zoom - along;
++			if (newZoom < m_ZoomMin)
++				newZoom = m_ZoomMin;
++			else if (newZoom > m_ZoomMax)
++				newZoom = m_ZoomMax;
++			along = zoom - newZoom;
++
++			debug_printf("pinch dist %.1f -> %.1f, height %.1f, zoom %.1f -> %.1f\n",
++				m_PinchDist, newDist, height, zoom, newZoom);
++
++			if (fabsf(along) > 0.001f)
++			{
++				// m_Zoom is carried along with the move so it keeps meaning
++				// the distance to the pivot; leaving it behind would confuse
++				// FocusHeight and the wheel zoom afterwards.
++				const CVector3D forwards = camera.GetOrientation().GetIn();
++				const CVector3D rot = view->GetCameraRotation();
++				view->SetCamera(view->GetCameraPosition() + forwards * along,
++					rot.X, rot.Y, newZoom);
++			}
 +		}
 +		m_PinchDist = newDist;
 +
@@ -642,7 +667,7 @@ which never mattered while the zoom was being thrown away and does now.
  	}
  }
  
-@@ -328,12 +537,30 @@
+@@ -328,12 +562,30 @@
  			ev->ev.tfinger.touchId, ev->ev.tfinger.fingerId,
  			ev->ev.tfinger.x, ev->ev.tfinger.y, ev->ev.tfinger.dx, ev->ev.tfinger.dy, ev->ev.tfinger.pressure);
  
