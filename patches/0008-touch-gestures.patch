@@ -363,7 +363,7 @@ which never mattered while the zoom was being thrown away and does now.
  	m_Down[id] = true;
  	m_Prev[id] = m_Pos[id] = CVector2D(x, y);
  
-@@ -90,152 +274,165 @@
+@@ -90,152 +274,177 @@
  		m_State = STATE_FIRST_TOUCH;
  		m_FirstTouchTime = timer_Time();
  		m_FirstTouchPos = CVector2D(x, y);
@@ -591,11 +591,18 @@ which never mattered while the zoom was being thrown away and does now.
  void CTouchInput::Frame()
  {
 -	double t = timer_Time();
-+	const double t = timer_Time();
- 	if (m_State == STATE_FIRST_TOUCH && t > m_FirstTouchTime + 1.0)
+-	if (m_State == STATE_FIRST_TOUCH && t > m_FirstTouchTime + 1.0)
++	// If a finger release ever goes missing - the compositor takes the touch
++	// away, the window loses focus mid-gesture - the state would stay stuck
++	// and IsGestureActive() would keep the camera controller switched off for
++	// good, leaving the keyboard and the edge dead until a restart.
++	// A first touch always has its finger down, so the long press below is
++	// unaffected and can never fire at a finger that is no longer there.
++	if (m_State != STATE_INACTIVE && FingersDown() == 0)
  	{
--		m_State = STATE_INACTIVE;
-+		m_State = STATE_SETTLE;
+ 		m_State = STATE_INACTIVE;
++		return;
++	}
  
 -		// must be fully initialised: uninitialised clicks/which/windowID are
 -		// handed to the GUI scripts (GuiScriptConversions.cpp reads .clicks)
@@ -606,7 +613,11 @@ which never mattered while the zoom was being thrown away and does now.
 -		ev.ev.button.button = SDL_BUTTON_RIGHT;
 -		ev.ev.button.x = m_Pos[0].X;
 -		ev.ev.button.y = m_Pos[0].Y;
--
++	const double t = timer_Time();
++	if (m_State == STATE_FIRST_TOUCH && t > m_FirstTouchTime + 1.0)
++	{
++		m_State = STATE_SETTLE;
+ 
 -		SDL_Event_ moveEv;
 -		memset(&moveEv, 0, sizeof(moveEv));
 -		moveEv.ev.type = SDL_MOUSEMOTION;
@@ -631,7 +642,7 @@ which never mattered while the zoom was being thrown away and does now.
  	}
  }
  
-@@ -328,12 +525,30 @@
+@@ -328,12 +537,30 @@
  			ev->ev.tfinger.touchId, ev->ev.tfinger.fingerId,
  			ev->ev.tfinger.x, ev->ev.tfinger.y, ev->ev.tfinger.dx, ev->ev.tfinger.dy, ev->ev.tfinger.pressure);
  
