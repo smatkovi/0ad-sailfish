@@ -14,6 +14,7 @@ NAME=harbour-0ad
 VERSION=0.28.0
 RELEASE=${RELEASE:-1}
 SB="sb2 -t $TARGET"
+FILES=${FILES:-$(dirname "$(readlink -f "$0")")/../sfos}
 
 ROOT="$WORK/pkgroot"
 rm -rf "$ROOT"
@@ -39,6 +40,14 @@ $SB strip --strip-unneeded "$ROOT/usr/share/$NAME/binaries/system/"* 2>/dev/null
 echo "### data (without public.zip)"
 cp -a "$TREE/binaries/data/config" "$TREE/binaries/data/l10n" "$TREE/binaries/data/tools" \
       "$ROOT/usr/share/$NAME/binaries/data/" 2>/dev/null || true
+
+# The repository's own default.cfg wins: it carries the touch settings and
+# turns off mouse edge scrolling, which has nothing to push against on a
+# phone and otherwise runs for ever after a tap near the edge.
+if [ -f "$FILES/../data-config/default.cfg" ]; then
+    cp "$FILES/../data-config/default.cfg" \
+       "$ROOT/usr/share/$NAME/binaries/data/config/default.cfg"
+fi
 mkdir -p "$ROOT/usr/share/$NAME/binaries/data/mods"
 cp -a "$TREE/binaries/data/mods/mod" "$ROOT/usr/share/$NAME/binaries/data/mods/" 2>/dev/null || true
 
@@ -51,7 +60,6 @@ echo "### launcher"
 #    sandboxing; "no-invoker" plus an explicit Sandboxing=Disabled avoids it.
 # launch.sh and the first-start progress page live next to this script in
 # sfos/ (repository: sfos/launch.sh, sfos/qml/harbour-0ad.qml).
-FILES=${FILES:-$(dirname "$(readlink -f "$0")")/../sfos}
 cp "$FILES/launch.sh" "$ROOT/usr/share/$NAME/launch.sh"
 chmod 755 "$ROOT/usr/share/$NAME/launch.sh"
 mkdir -p "$ROOT/usr/share/$NAME/qml"
