@@ -1,0 +1,9 @@
+{
+	"name": "sfostouch",
+	"version": "1.0",
+	"label": "Touch tweaks for Sailfish OS",
+	"url": "https://github.com/smatkovi/0ad-sailfish",
+	"description": "Scroll bars wide enough to hit with a finger.",
+	"dependencies": ["0ad=0.28.0"],
+	"ignoreInCompatibilityChecks": true
+}

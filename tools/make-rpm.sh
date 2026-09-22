@@ -65,7 +65,14 @@ else
     echo "WARNING: data-config/default.cfg not found, shipping upstream config" >&2
 fi
 mkdir -p "$ROOT/usr/share/$NAME/binaries/data/mods"
+# the source tree has no mods/mod - the base mod exists only in the release
+# data archive, which launch.sh downloads next to public.zip
 cp -a "$TREE/binaries/data/mods/mod" "$ROOT/usr/share/$NAME/binaries/data/mods/" 2>/dev/null || true
+# our own mods travel with the package (sfos/mods/*, enabled in default.cfg)
+for m in "$FILES"/mods/*/; do
+    [ -d "$m" ] || continue
+    cp -a "$m" "$ROOT/usr/share/$NAME/binaries/data/mods/"
+done
 
 echo "### launcher"
 # Two lessons from the device:
